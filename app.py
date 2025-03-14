@@ -15,15 +15,14 @@ import time
 # Load environment variables
 load_dotenv()
 
-# Configure Streamlit page
+# Configure Streamlit page - must be the first Streamlit command
 st.set_page_config(
     page_title="Chat with PDF",
     page_icon="📚",
     layout="wide"
 )
 
-# Disable automatic rerun on widget changes
-st.set_page_config(layout="wide")
+# Clear cache to prevent auto-reloading issues
 st.cache_data.clear()
 
 class RateLimiter:

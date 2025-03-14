@@ -216,14 +216,6 @@ def main():
 
     # Sidebar for model selection and file upload
     with st.sidebar:
-        st.header("Settings")
-        
-        # Display rate limits
-        daily_remaining, minute_remaining = st.session_state.chatbot.rate_limiter.get_remaining_requests()
-        st.write("**Rate Limits:**")
-        st.write(f"- Daily messages remaining: {daily_remaining}/20")
-        st.write(f"- Messages per minute remaining: {minute_remaining}/3")
-        
         # Model selection
         selected_model = st.selectbox(
             "Choose a model",

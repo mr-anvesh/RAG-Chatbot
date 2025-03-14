@@ -85,7 +85,22 @@ class PDFChatbot:
             )
             
             if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
+                response_data = response.json()
+                # Debug the response
+                st.write("API Response:", response_data)
+                
+                # Handle different response formats
+                if "choices" in response_data and len(response_data["choices"]) > 0:
+                    if "message" in response_data["choices"][0]:
+                        return response_data["choices"][0]["message"]["content"]
+                    elif "text" in response_data["choices"][0]:
+                        return response_data["choices"][0]["text"]
+                elif "response" in response_data:
+                    return response_data["response"]
+                else:
+                    st.error("Unexpected API response format")
+                    st.write("Full response:", response_data)
+                    return "I apologize, but I received an unexpected response format. Please try again."
             else:
                 st.error(f"Error from API: {response.text}")
                 return "I apologize, but I encountered an error. Please try again."

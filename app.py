@@ -8,7 +8,9 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from models_config import AVAILABLE_MODELS
-from datetime import datetime
+from datetime import datetime, timedelta
+from collections import deque
+import time
 
 # Load environment variables
 load_dotenv()
@@ -20,6 +22,71 @@ st.set_page_config(
     layout="wide"
 )
 
+class RateLimiter:
+    def __init__(self, daily_limit=20, minute_limit=3, minutes_window=1):
+        self.daily_limit = daily_limit
+        self.minute_limit = minute_limit
+        self.minutes_window = minutes_window
+        
+        # Initialize session state for rate limiting
+        if "daily_requests" not in st.session_state:
+            st.session_state.daily_requests = []
+        if "minute_requests" not in st.session_state:
+            st.session_state.minute_requests = deque(maxlen=minute_limit)
+        if "last_reset_date" not in st.session_state:
+            st.session_state.last_reset_date = datetime.now().date()
+    
+    def _reset_if_new_day(self):
+        current_date = datetime.now().date()
+        if current_date > st.session_state.last_reset_date:
+            st.session_state.daily_requests = []
+            st.session_state.last_reset_date = current_date
+    
+    def _clean_old_requests(self):
+        current_time = datetime.now()
+        minute_ago = current_time - timedelta(minutes=self.minutes_window)
+        
+        # Remove requests older than the window
+        while (st.session_state.minute_requests and 
+               st.session_state.minute_requests[0] < minute_ago):
+            st.session_state.minute_requests.popleft()
+    
+    def can_make_request(self):
+        self._reset_if_new_day()
+        self._clean_old_requests()
+        
+        # Check daily limit
+        if len(st.session_state.daily_requests) >= self.daily_limit:
+            remaining_time = datetime.now().date() + timedelta(days=1)
+            st.error(f"Daily message limit reached ({self.daily_limit} messages). "
+                    f"Please try again tomorrow.")
+            return False
+        
+        # Check per-minute limit
+        if len(st.session_state.minute_requests) >= self.minute_limit:
+            oldest_request = st.session_state.minute_requests[0]
+            wait_time = (oldest_request + timedelta(minutes=self.minutes_window) - 
+                        datetime.now()).total_seconds()
+            if wait_time > 0:
+                st.error(f"Rate limit reached. Please wait {int(wait_time)} seconds before sending another message.")
+                return False
+        
+        return True
+    
+    def add_request(self):
+        current_time = datetime.now()
+        st.session_state.daily_requests.append(current_time)
+        st.session_state.minute_requests.append(current_time)
+    
+    def get_remaining_requests(self):
+        self._reset_if_new_day()
+        self._clean_old_requests()
+        
+        daily_remaining = self.daily_limit - len(st.session_state.daily_requests)
+        minute_remaining = self.minute_limit - len(st.session_state.minute_requests)
+        
+        return daily_remaining, minute_remaining
+
 class PDFChatbot:
     def __init__(self):
         self.vectorizer = TfidfVectorizer()
@@ -27,6 +94,7 @@ class PDFChatbot:
         self.chunks = []
         self.api_key = os.getenv("OPENROUTER_API_KEY")
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.rate_limiter = RateLimiter(daily_limit=20, minute_limit=3, minutes_window=1)
         
     def process_pdfs(self, pdf_files):
         """Process multiple PDF files and create document vectors."""
@@ -66,6 +134,10 @@ class PDFChatbot:
     
     def get_model_response(self, messages, model_id):
         """Get response from the selected model."""
+        # Check rate limits
+        if not self.rate_limiter.can_make_request():
+            return None
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -85,11 +157,10 @@ class PDFChatbot:
             )
             
             if response.status_code == 200:
-                response_data = response.json()
-                # Debug the response
-                st.write("API Response:", response_data)
+                # Record the successful request
+                self.rate_limiter.add_request()
                 
-                # Handle different response formats
+                response_data = response.json()
                 if "choices" in response_data and len(response_data["choices"]) > 0:
                     if "message" in response_data["choices"][0]:
                         return response_data["choices"][0]["message"]["content"]
@@ -99,7 +170,6 @@ class PDFChatbot:
                     return response_data["response"]
                 else:
                     st.error("Unexpected API response format")
-                    st.write("Full response:", response_data)
                     return "I apologize, but I received an unexpected response format. Please try again."
             else:
                 st.error(f"Error from API: {response.text}")
@@ -142,6 +212,12 @@ def main():
     # Sidebar for model selection and file upload
     with st.sidebar:
         st.header("Settings")
+        
+        # Display rate limits
+        daily_remaining, minute_remaining = st.session_state.chatbot.rate_limiter.get_remaining_requests()
+        st.write("**Rate Limits:**")
+        st.write(f"- Daily messages remaining: {daily_remaining}/20")
+        st.write(f"- Messages per minute remaining: {minute_remaining}/3")
         
         # Model selection
         selected_model = st.selectbox(

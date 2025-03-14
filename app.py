@@ -271,7 +271,6 @@ def main():
         col1, col2 = st.columns([8, 1])
         with col1:
             user_question = st.text_input(
-                "",  # Remove label
                 placeholder="Ask a question about your PDFs..." if not st.session_state.replying_to else "Enter your reply...",
                 key="question_input"
             )

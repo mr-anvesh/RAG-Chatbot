@@ -190,10 +190,11 @@ def display_message(container, role, content, message_id=None):
             st.write(f"🧑 **You:** {content}")
         else:
             st.write(f"🤖 **Assistant:** {content}")
-            # Add reply button
-            if st.button("↩️ Reply", key=f"reply_{message_id}"):
-                st.session_state.replying_to = message_id
-                st.session_state.reply_context = content
+            # Add reply button with a static key
+            if message_id and st.session_state.replying_to is None:
+                if st.button("Reply", key=f"reply_{message_id[:8]}", help="Reply to this message"):
+                    st.session_state.replying_to = message_id
+                    st.session_state.reply_context = content
 
 def main():
     st.title("💬 Chat with Your PDFs")
@@ -209,10 +210,10 @@ def main():
         st.session_state.replying_to = None
     if "reply_context" not in st.session_state:
         st.session_state.reply_context = None
-    if "message_containers" not in st.session_state:
-        st.session_state.message_containers = {}
     if "current_question" not in st.session_state:
         st.session_state.current_question = ""
+    if "page" not in st.session_state:
+        st.session_state.page = 0
 
     # Sidebar for model selection and file upload
     with st.sidebar:
@@ -260,7 +261,6 @@ def main():
             if st.button("Cancel Reply", key="cancel_reply"):
                 st.session_state.replying_to = None
                 st.session_state.reply_context = None
-                st.rerun()
 
         # Chat input
         col1, col2 = st.columns([6, 1])
@@ -304,7 +304,7 @@ def main():
                 
                 if response is not None:  # Only add to history if we got a valid response
                     # Generate a unique message ID
-                    message_id = f"msg_{len(st.session_state.chat_history)}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    message_id = f"msg_{len(st.session_state.chat_history)}_{int(time.time())}"
                     st.session_state.chat_history.append({
                         "id": message_id,
                         "question": user_question,
@@ -316,22 +316,43 @@ def main():
                     st.session_state.replying_to = None
                     st.session_state.reply_context = None
                     st.session_state.current_question = ""
+                    # Move to the first page to show the new message
+                    st.session_state.page = 0
 
         # Display chat history with reply buttons
-        for msg in reversed(st.session_state.chat_history):  # Show newest messages first
-            # Create a new container for each message pair if it doesn't exist
-            if msg["id"] not in st.session_state.message_containers:
-                st.session_state.message_containers[msg["id"]] = create_message_container()
-            
-            container = st.session_state.message_containers[msg["id"]]
-            with container:
+        st.write("### Chat History")
+        
+        # Pagination controls
+        messages_per_page = 5
+        total_pages = max(0, len(st.session_state.chat_history) - 1) // messages_per_page
+        
+        # Only show pagination if there are more than 5 messages
+        if total_pages > 0:
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col1:
+                if st.button("← Previous", disabled=st.session_state.page <= 0):
+                    st.session_state.page -= 1
+            with col2:
+                st.write(f"Page {st.session_state.page + 1} of {total_pages + 1}")
+            with col3:
+                if st.button("Next →", disabled=st.session_state.page >= total_pages):
+                    st.session_state.page += 1
+        
+        # Calculate the range of messages to display
+        start_idx = st.session_state.page * messages_per_page
+        end_idx = min(start_idx + messages_per_page, len(st.session_state.chat_history))
+        display_messages = list(reversed(st.session_state.chat_history[start_idx:end_idx]))
+        
+        # Display messages
+        for msg in display_messages:
+            with st.container():
                 # Show reply-to context if this is a reply
                 if msg["reply_to"]:
                     st.markdown("*↳ Replying to previous message*")
                 
                 # Display messages
-                display_message(container, "user", msg["question"])
-                display_message(container, "assistant", msg["answer"], msg["id"])
+                display_message(st.container(), "user", msg["question"])
+                display_message(st.container(), "assistant", msg["answer"], msg["id"])
                 st.write("---")
 
 if __name__ == "__main__":

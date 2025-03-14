@@ -8,6 +8,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 from models_config import AVAILABLE_MODELS
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -92,6 +93,20 @@ class PDFChatbot:
             st.error(f"Error: {str(e)}")
             return "I apologize, but I encountered an error. Please try again."
 
+def create_message_container():
+    return st.container()
+
+def display_message(container, role, content, message_id=None):
+    with container:
+        if role == "user":
+            st.write(f"🧑 **You:** {content}")
+        else:
+            st.write(f"🤖 **Assistant:** {content}")
+            # Add reply button
+            if st.button("↩️ Reply", key=f"reply_{message_id}"):
+                st.session_state.replying_to = message_id
+                st.session_state.reply_context = content
+
 def main():
     st.title("💬 Chat with Your PDFs")
     
@@ -102,6 +117,12 @@ def main():
         st.session_state.chat_history = []
     if "processed_files" not in st.session_state:
         st.session_state.processed_files = False
+    if "replying_to" not in st.session_state:
+        st.session_state.replying_to = None
+    if "reply_context" not in st.session_state:
+        st.session_state.reply_context = None
+    if "message_containers" not in st.session_state:
+        st.session_state.message_containers = {}
 
     # Sidebar for model selection and file upload
     with st.sidebar:
@@ -135,8 +156,18 @@ def main():
     if not st.session_state.processed_files:
         st.info("Please upload and process some PDF files to start chatting!")
     else:
+        # Show if replying to a message
+        if st.session_state.replying_to is not None:
+            st.info(f"Replying to: {st.session_state.reply_context[:100]}...")
+            if st.button("Cancel Reply"):
+                st.session_state.replying_to = None
+                st.session_state.reply_context = None
+                st.rerun()
+
         # Chat input
-        user_question = st.text_input("Ask a question about your PDFs:")
+        user_question = st.text_input(
+            "Ask a question or reply:" if st.session_state.replying_to else "Ask a question about your PDFs:"
+        )
         
         if user_question:
             # Get relevant context
@@ -148,12 +179,18 @@ def main():
                     "role": "system",
                     "content": "You are a helpful assistant that answers questions based on the provided context. "
                               "If you cannot find the answer in the context, say so."
-                },
-                {
-                    "role": "user",
-                    "content": f"Context:\n{context}\n\nQuestion: {user_question}"
                 }
             ]
+            
+            # Add reply context if replying
+            if st.session_state.replying_to is not None:
+                messages.append({"role": "assistant", "content": st.session_state.reply_context})
+                messages.append({"role": "user", "content": f"Regarding your previous response, {user_question}"})
+            else:
+                messages.append({
+                    "role": "user",
+                    "content": f"Context:\n{context}\n\nQuestion: {user_question}"
+                })
             
             # Get model response
             with st.spinner("Thinking..."):
@@ -161,13 +198,38 @@ def main():
                     messages,
                     AVAILABLE_MODELS[selected_model]["id"]
                 )
-                st.session_state.chat_history.append((user_question, response))
+                # Generate a unique message ID
+                message_id = f"msg_{len(st.session_state.chat_history)}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                st.session_state.chat_history.append({
+                    "id": message_id,
+                    "question": user_question,
+                    "answer": response,
+                    "reply_to": st.session_state.replying_to
+                })
+                
+                # Reset reply state
+                st.session_state.replying_to = None
+                st.session_state.reply_context = None
+                
+                # Rerun to update the UI
+                st.rerun()
 
-        # Display chat history
-        for q, a in st.session_state.chat_history:
-            st.write(f"🧑 **You:** {q}")
-            st.write(f"🤖 **Assistant:** {a}")
-            st.write("---")
+        # Display chat history with reply buttons
+        for msg in st.session_state.chat_history:
+            # Create a new container for each message pair if it doesn't exist
+            if msg["id"] not in st.session_state.message_containers:
+                st.session_state.message_containers[msg["id"]] = create_message_container()
+            
+            container = st.session_state.message_containers[msg["id"]]
+            with container:
+                # Show reply-to context if this is a reply
+                if msg["reply_to"]:
+                    st.markdown("*↳ Replying to previous message*")
+                
+                # Display messages
+                display_message(container, "user", msg["question"])
+                display_message(container, "assistant", msg["answer"], msg["id"])
+                st.write("---")
 
 if __name__ == "__main__":
     main() 

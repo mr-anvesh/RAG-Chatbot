@@ -254,86 +254,101 @@ def main():
     if not st.session_state.processed_files:
         st.info("Please upload and process some PDF files to start chatting!")
     else:
-        # Create a container for messages
-        messages_container = st.container()
+        # Add some spacing at the top
+        st.write("")
+        st.write("")
         
-        # Create a container for the input area at the bottom
-        input_container = st.container()
+        # Input area near the top
+        st.markdown("---")
+        # Show if replying to a message
+        if st.session_state.replying_to is not None:
+            st.info(f"Replying to: {st.session_state.reply_context[:100]}...")
+            if st.button("Cancel Reply", key="cancel_reply"):
+                st.session_state.replying_to = None
+                st.session_state.reply_context = None
         
-        # Display messages in the messages container
-        with messages_container:
-            if st.session_state.chat_history:
-                # Get the last message pair
-                last_msg = st.session_state.chat_history[-1]
-                st.markdown(f"🧑 **You:** {last_msg['question']}")
+        # Adjust column ratios for better alignment
+        col1, col2 = st.columns([8, 1])
+        with col1:
+            user_question = st.text_input(
+                "Ask a question or reply:" if st.session_state.replying_to else "Ask a question about your PDFs:",
+                key="question_input"
+            )
+        with col2:
+            # Add vertical spacing to align button with text input
+            st.write("")
+            submit_button = st.button("Send", key="submit_question")
+        
+        st.markdown("---")
+        
+        # Display the last message pair with reply option
+        if st.session_state.chat_history:
+            # Get the last message pair
+            last_msg = st.session_state.chat_history[-1]
+            
+            # Display user message
+            st.markdown(f"🧑 **You:** {last_msg['question']}")
+            
+            # Display assistant message with reply button
+            col1, col2 = st.columns([8, 1])
+            with col1:
                 st.markdown(f"🤖 **Assistant:** {last_msg['answer']}")
+            with col2:
+                # Add vertical spacing to align reply button
+                st.write("")
+                if st.session_state.replying_to is None:
+                    if st.button("↩️ Reply", key="reply_last"):
+                        st.session_state.replying_to = last_msg["id"]
+                        st.session_state.reply_context = last_msg["answer"]
+                        st.rerun()
         
-        # Input area at the bottom
-        with input_container:
-            st.markdown("---")
-            # Show if replying to a message
+        if submit_button and user_question:
+            # Get relevant context
+            context = st.session_state.chatbot.get_relevant_context(user_question)
+            
+            # Prepare messages
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant that answers questions based on the provided context. "
+                              "If you cannot find the answer in the context, say so."
+                }
+            ]
+            
+            # Add reply context if replying
             if st.session_state.replying_to is not None:
-                st.info(f"Replying to: {st.session_state.reply_context[:100]}...")
-                if st.button("Cancel Reply", key="cancel_reply"):
+                messages.append({"role": "assistant", "content": st.session_state.reply_context})
+                messages.append({"role": "user", "content": f"Regarding your previous response, {user_question}"})
+            else:
+                messages.append({
+                    "role": "user",
+                    "content": f"Context:\n{context}\n\nQuestion: {user_question}"
+                })
+            
+            # Get model response
+            with st.spinner("Thinking..."):
+                response = st.session_state.chatbot.get_model_response(
+                    messages,
+                    AVAILABLE_MODELS[selected_model]["id"]
+                )
+                
+                if response is not None:  # Only add to history if we got a valid response
+                    # Generate a unique message ID using just the index
+                    message_id = f"msg_{len(st.session_state.chat_history)}"
+                    st.session_state.chat_history.append({
+                        "id": message_id,
+                        "question": user_question,
+                        "answer": response,
+                        "reply_to": st.session_state.replying_to
+                    })
+                    
+                    # Reset states
                     st.session_state.replying_to = None
                     st.session_state.reply_context = None
-            
-            col1, col2 = st.columns([6, 1])
-            with col1:
-                user_question = st.text_input(
-                    "Ask a question or reply:" if st.session_state.replying_to else "Ask a question about your PDFs:",
-                    key="question_input"
-                )
-            with col2:
-                submit_button = st.button("Send", key="submit_question")
-            
-            if submit_button and user_question:
-                # Get relevant context
-                context = st.session_state.chatbot.get_relevant_context(user_question)
-                
-                # Prepare messages
-                messages = [
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that answers questions based on the provided context. "
-                                  "If you cannot find the answer in the context, say so."
-                    }
-                ]
-                
-                # Add reply context if replying
-                if st.session_state.replying_to is not None:
-                    messages.append({"role": "assistant", "content": st.session_state.reply_context})
-                    messages.append({"role": "user", "content": f"Regarding your previous response, {user_question}"})
-                else:
-                    messages.append({
-                        "role": "user",
-                        "content": f"Context:\n{context}\n\nQuestion: {user_question}"
-                    })
-                
-                # Get model response
-                with st.spinner("Thinking..."):
-                    response = st.session_state.chatbot.get_model_response(
-                        messages,
-                        AVAILABLE_MODELS[selected_model]["id"]
-                    )
+                    st.session_state.current_question = ""
                     
-                    if response is not None:  # Only add to history if we got a valid response
-                        # Generate a unique message ID using just the index
-                        message_id = f"msg_{len(st.session_state.chat_history)}"
-                        st.session_state.chat_history.append({
-                            "id": message_id,
-                            "question": user_question,
-                            "answer": response,
-                            "reply_to": st.session_state.replying_to
-                        })
-                        
-                        # Reset states
-                        st.session_state.replying_to = None
-                        st.session_state.reply_context = None
-                        st.session_state.current_question = ""
-                        
-                        # Rerun to update the display
-                        st.rerun()
+                    # Rerun to update the display
+                    st.rerun()
 
 if __name__ == "__main__":
     main() 

@@ -278,6 +278,7 @@ def main():
         with col2:
             # Add vertical spacing to align button with text input
             st.write("")
+            st.write("")
             submit_button = st.button("Send", key="submit_question")
         
         st.markdown("---")

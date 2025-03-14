@@ -18,10 +18,5 @@ AVAILABLE_MODELS = {
         "id": "mistralai/mistral-7b-instruct:free",
         "context_length": 4000,
         "description": "Efficient open-source model with good performance"
-    },
-    "Claude-2 (Paid)": {
-        "id": "anthropic/claude-2",
-        "context_length": 100000,
-        "description": "Powerful model with large context window (requires credits)"
     }
 } 

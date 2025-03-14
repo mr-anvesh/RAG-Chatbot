@@ -267,19 +267,17 @@ def main():
                 st.session_state.replying_to = None
                 st.session_state.reply_context = None
         
-        # Adjust column ratios for better alignment
-        col1, col2 = st.columns([8, 1])
-        with col1:
-            user_question = st.text_input(
-                "",  # Remove label
-                placeholder="Ask a question about your PDFs..." if not st.session_state.replying_to else "Enter your reply...",
-                key="question_input"
-            )
-        with col2:
-            # Add vertical spacing to align button with text input
-            st.write("")
-            st.write("")
-            submit_button = st.button("Send", key="submit_question")
+        # Full width text input
+        user_question = st.text_input(
+            "",  # Remove label
+            placeholder="Ask a question about your PDFs..." if not st.session_state.replying_to else "Enter your reply...",
+            key="question_input"
+        )
+        
+        # Center the send button using columns
+        left_spacer, center_col, right_spacer = st.columns([3, 1, 3])
+        with center_col:
+            submit_button = st.button("Send →", key="submit_question")
         
         st.markdown("---")
         

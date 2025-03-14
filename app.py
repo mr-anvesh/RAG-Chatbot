@@ -22,6 +22,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# Disable automatic rerun on widget changes
+st.set_page_config(layout="wide")
+st.cache_data.clear()
+
 class RateLimiter:
     def __init__(self, daily_limit=20, minute_limit=3, minutes_window=1):
         self.daily_limit = daily_limit
@@ -157,10 +161,10 @@ class PDFChatbot:
             )
             
             if response.status_code == 200:
-                # Record the successful request
+                response_data = response.json()
+                # Only record the request if we get a valid response
                 self.rate_limiter.add_request()
                 
-                response_data = response.json()
                 if "choices" in response_data and len(response_data["choices"]) > 0:
                     if "message" in response_data["choices"][0]:
                         return response_data["choices"][0]["message"]["content"]
@@ -208,6 +212,8 @@ def main():
         st.session_state.reply_context = None
     if "message_containers" not in st.session_state:
         st.session_state.message_containers = {}
+    if "current_question" not in st.session_state:
+        st.session_state.current_question = ""
 
     # Sidebar for model selection and file upload
     with st.sidebar:
@@ -224,7 +230,8 @@ def main():
             "Choose a model",
             options=list(AVAILABLE_MODELS.keys()),
             index=0,
-            help="Select the AI model to use for chat"
+            help="Select the AI model to use for chat",
+            key="model_selector"
         )
         
         st.write(f"**Model Description:**  \n{AVAILABLE_MODELS[selected_model]['description']}")
@@ -233,11 +240,12 @@ def main():
         uploaded_files = st.file_uploader(
             "Upload PDFs",
             type=['pdf'],
-            accept_multiple_files=True
+            accept_multiple_files=True,
+            key="pdf_uploader"
         )
         
         if uploaded_files:
-            if st.button("Process PDFs"):
+            if st.button("Process PDFs", key="process_pdfs"):
                 with st.spinner("Processing PDFs..."):
                     num_chunks = st.session_state.chatbot.process_pdfs(uploaded_files)
                     st.session_state.processed_files = True
@@ -250,17 +258,22 @@ def main():
         # Show if replying to a message
         if st.session_state.replying_to is not None:
             st.info(f"Replying to: {st.session_state.reply_context[:100]}...")
-            if st.button("Cancel Reply"):
+            if st.button("Cancel Reply", key="cancel_reply"):
                 st.session_state.replying_to = None
                 st.session_state.reply_context = None
                 st.rerun()
 
         # Chat input
-        user_question = st.text_input(
-            "Ask a question or reply:" if st.session_state.replying_to else "Ask a question about your PDFs:"
-        )
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            user_question = st.text_input(
+                "Ask a question or reply:" if st.session_state.replying_to else "Ask a question about your PDFs:",
+                key="question_input"
+            )
+        with col2:
+            submit_button = st.button("Send", key="submit_question")
         
-        if user_question:
+        if submit_button and user_question:
             # Get relevant context
             context = st.session_state.chatbot.get_relevant_context(user_question)
             
@@ -289,24 +302,24 @@ def main():
                     messages,
                     AVAILABLE_MODELS[selected_model]["id"]
                 )
-                # Generate a unique message ID
-                message_id = f"msg_{len(st.session_state.chat_history)}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-                st.session_state.chat_history.append({
-                    "id": message_id,
-                    "question": user_question,
-                    "answer": response,
-                    "reply_to": st.session_state.replying_to
-                })
                 
-                # Reset reply state
-                st.session_state.replying_to = None
-                st.session_state.reply_context = None
-                
-                # Rerun to update the UI
-                st.rerun()
+                if response is not None:  # Only add to history if we got a valid response
+                    # Generate a unique message ID
+                    message_id = f"msg_{len(st.session_state.chat_history)}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                    st.session_state.chat_history.append({
+                        "id": message_id,
+                        "question": user_question,
+                        "answer": response,
+                        "reply_to": st.session_state.replying_to
+                    })
+                    
+                    # Reset states
+                    st.session_state.replying_to = None
+                    st.session_state.reply_context = None
+                    st.session_state.current_question = ""
 
         # Display chat history with reply buttons
-        for msg in st.session_state.chat_history:
+        for msg in reversed(st.session_state.chat_history):  # Show newest messages first
             # Create a new container for each message pair if it doesn't exist
             if msg["id"] not in st.session_state.message_containers:
                 st.session_state.message_containers[msg["id"]] = create_message_container()

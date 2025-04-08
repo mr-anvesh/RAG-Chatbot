@@ -19,8 +19,8 @@ Try the app here: https://am-rag-chatbot.streamlit.app/
 
 1. Clone the repository
 ```bash
-git clone <your-repo-url>
-cd <your-repo-name>
+git clone https://github.com/mr-anvesh/RAG-Chatbot.git
+cd RAG-Chatbot
 ```
 
 2. Install dependencies

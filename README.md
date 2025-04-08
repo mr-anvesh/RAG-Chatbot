@@ -13,7 +13,7 @@ A Streamlit application that allows you to chat with your PDF documents using RA
 
 ## 🚀 Demo
 
-Try the app here: [Your-App-URL]
+Try the app here: https://am-rag-chatbot.streamlit.app/
 
 ## 💻 Local Development
 

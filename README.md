@@ -1,3 +1,4 @@
+---
 title: 'RAG Chatbot'
 description: 'A Streamlit-based chatbot that lets users upload PDFs and ask context-aware questions using retrieval-augmented generation.'
 image: '/project/image.png'
@@ -30,6 +31,7 @@ learnings:
 - 'API Error Handling'
 - 'Production Deployment'
 isPublished: true
+---
 
 # RAG Chatbot: Chat with Your PDFs
 ## Overview
@@ -40,8 +42,8 @@ Feature 1: Upload one or multiple PDF files and process them into searchable chu
 Feature 2: Ask questions and receive answers generated from the most relevant document context.
 Feature 3: Continue conversations with reply-style follow-ups while keeping context in session history.
 
-## Why i built this
-I built this platform to solve a fundamental issue i faced while studying as follows -
+## Why I built this
+I built this platform to solve a fundamental issue I faced while studying as follows:
 Issue 1: Reading long PDFs manually is slow and makes information retrieval inefficient.
 Issue 2: It is difficult to quickly find precise answers across multiple documents during revision.
 
